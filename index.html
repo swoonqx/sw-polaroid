@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>폴라로이드 메이커</title>
-<meta name="description" content="폴라로이드 메이커">
+<meta name="description" content="사진을 올리고 아크릴펜으로 자유롭게 꾸미는 사이버 폴라로이드 메이커입니다.">
 <meta name="theme-color" content="#0b0c0d">
 <meta property="og:type" content="website">
 <meta property="og:title" content="폴라로이드 메이커">
-<meta property="og:description" content="이미지만 올리면 폴라로이드를 만들 수 있어요!">
+<meta property="og:description" content="사진 업로드 + 아크릴펜 꾸미기(3레이어) + 캡션 텍스트, PNG로 저장.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0c0d'/%3E%3Crect x='14' y='11' width='36' height='42' rx='3' fill='%23fbfbfa'/%3E%3Crect x='18' y='15' width='28' height='22' rx='1.5' fill='%2314b8a6'/%3E%3Ccircle cx='32' cy='46' r='3' fill='%2314b8a6'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -631,6 +631,21 @@
     html.mobile-layout.preview-fullscreen .stage * { visibility: visible; pointer-events: auto; }
   }
 
+
+  /* Sticker controls: stickers render above the Polaroid/photo and below every pen layer. */
+  .sticker-box { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .sticker-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .sticker-head strong { font-size:13px; color:var(--text2); }
+  .sticker-count { font-size:11px; color:var(--muted); }
+  .sticker-list { display:flex; flex-direction:column; gap:7px; margin-top:10px; }
+  .sticker-item { display:grid; grid-template-columns: minmax(0,1fr) auto auto auto; gap:5px; align-items:center; padding:7px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  .sticker-item.active { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+  .sticker-item .sticker-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:700; text-align:left; border:0; background:transparent; padding:5px 6px; }
+  .sticker-item .mini { min-width:32px; padding:5px 7px; border-radius:7px; font-size:12px; }
+  #cv.sticker-transforming { cursor: grabbing !important; }
+  .sticker-item .sticker-name:disabled { opacity:.5; cursor:not-allowed; }
+  #addStickerBtn:disabled { opacity:.45; }
+
 </style>
 </head>
 <body>
@@ -709,7 +724,7 @@
     </div>
     <div class="mode-panel" id="decoratePanel" data-mode-panel="decorate" hidden>
     <div class="box locked" id="decorateBox">
-      <h2 id="decorateHeading">꾸미기</h2>
+      <h2 id="decorateHeading">꾸미기 (아크릴펜)</h2>
       <div class="lock-body">
         <div class="row">
           <div class="toggle-group" id="toolGroup">
@@ -736,7 +751,7 @@
         <div class="size-presets" id="sizePresets" style="margin-top:8px"></div>
 
         <div class="row" style="margin-top:14px">
-          <label id="layerHeadingLabel">레이어</label>
+          <label id="layerHeadingLabel">펜 레이어</label>
         </div>
         <div class="layer-row" id="layerRow" style="margin-top:8px"></div>
 
@@ -754,6 +769,17 @@
           <button id="clearLayerBtn" type="button">레이어 지우기</button>
           <button id="clearAllBtn" type="button">전체 지우기</button>
         </div>
+
+        <div class="sticker-box" id="stickerBox">
+          <div class="sticker-head">
+            <strong id="stickerHeading">스티커</strong>
+            <span class="sticker-count" id="stickerCount">0 / 5</span>
+          </div>
+          <button type="button" id="addStickerBtn" class="full" style="margin-top:10px">+ 스티커 이미지 추가</button>
+          <p class="hint" id="stickerHint">사진 이동 도구에서 편집할 스티커를 선택한 뒤 위치, 크기, 각도를 조절할 수 있어요. 흰색 테두리가 자동으로 적용됩니다.</p>
+          <div class="sticker-list" id="stickerList"></div>
+        </div>
+
       </div>
       <div class="lock-overlay" id="lockOverlay">사진을 먼저 업로드하면<br>꾸미기 기능이 활성화돼요</div>
     </div>
@@ -762,6 +788,7 @@
 </main>
 
 <input type="file" id="picker" accept="image/*">
+<input type="file" id="stickerPicker" accept="image/*">
 
 <div class="color-picker-backdrop" id="colorPickerBackdrop" hidden>
   <section class="color-picker-sheet" id="colorPickerSheet" role="dialog" aria-modal="true" aria-label="색상 선택">
@@ -819,6 +846,7 @@
 
   const cv = $('#cv'), ctx = cv.getContext('2d');
   const picker = $('#picker');
+  const stickerPicker = $('#stickerPicker');
 
   const ASPECTS = {
     square: { ratio: 1 },
@@ -828,7 +856,7 @@
 
   const I18N = {
     ko: {
-      title: '폴라로이드 메이커', metaDesc: '사진을 올리고 아크릴펜으로 자유롭게 꾸미는 폴라로이드 메이커입니다.',
+      title: '폴라로이드 메이커', metaDesc: '사진을 올리고 아크릴펜으로 자유롭게 꾸미는 사이버 폴라로이드 메이커입니다.',
       brand: '폴라로이드 <i>메이커</i>', creator: '제작:', editMode: '편집 모드', decorateMode: '꾸미기 모드', save: '이미지 저장', preview: '폴라로이드 미리보기',
       sizeHeading: '사이즈', aspectSquare: '1:1', aspectLandscape: '3:4 가로', aspectPortrait: '3:4 세로',
       sizeHint: '사이즈를 바꾸면 꾸민 내용은 초기화돼요.',
@@ -836,17 +864,17 @@
       dragHint: '사진 이동 도구를 선택하면 드래그로 위치를 옮길 수 있어요.', canvasAdd: '사진 추가',
       captionHeading: '글씨', captionPlaceholder: '문구를 입력하세요',
       cardBgLabel: '배경색', captionColorLabel: '글자 색', captionSizeLabel: '텍스트 크기',
-      decorateHeading: '꾸미기', lockOverlay: '사진을 먼저 업로드하면<br>꾸미기 기능이 활성화돼요',
+      decorateHeading: '꾸미기 (아크릴펜)', lockOverlay: '사진을 먼저 업로드하면<br>꾸미기 기능이 활성화돼요',
       toolPen: '펜', toolEraser: '지우개', toolMove: '사진 이동',
-      colorLabel: '펜 색상', brushSizeLabel: '굵기', layerHeadingLabel: '레이어',
+      colorLabel: '펜 색상', brushSizeLabel: '굵기', layerHeadingLabel: '펜 레이어',
       layer: '레이어', undo: '실행취소', redo: '되돌리기', clearLayer: '레이어 지우기', clearAll: '전체 지우기',
       colorPickerTitle: '색상 선택', colorApply: '적용', colorEyedropper: '스포이드',
       colorSVAria: '채도와 밝기', colorHueAria: '색상', colorHexAria: 'HEX 색상',
       confirmClearAll: '전체 레이어를 지울까요?', confirmClearAspect: '지금 사이즈를 변경하면 꾸밈요소가 초기화돼요!',
-      layerDragHint: '드래그하여 순서 변경', colorRecentLabel: '최근 사용한 색상', fullscreenOpen: '미리보기 크게 보기', fullscreenClose: '전체화면 닫기',
+      layerDragHint: '드래그하여 순서 변경', colorRecentLabel: '최근 사용한 색상', fullscreenOpen: '미리보기 크게 보기', fullscreenClose: '전체화면 닫기', stickerHeading: '스티커', addSticker: '+ 스티커 이미지 추가', stickerSize: '크기', stickerAngle: '각도', stickerHint: '사진 이동 도구에서 스티커를 선택하면 자유변형 핸들이 표시됩니다. 모서리 핸들로 크기, 위쪽 원형 핸들로 각도를 조절하고 스티커 자체를 드래그해 이동하세요. 펜/지우개 사용 중에는 스티커가 선택되지 않습니다.', stickerLimit: '스티커는 최대 5개까지 추가할 수 있어요.', stickerDelete: '삭제', stickerLabel: '스티커',
     },
     en: {
-      title: 'Polaroid Maker', metaDesc: 'Upload a photo and freely decorate your Polaroid with acrylic pens.',
+      title: 'Polaroid Maker', metaDesc: 'Upload a photo and freely decorate your cyber Polaroid with acrylic pens.',
       brand: 'Polaroid <i>Maker</i>', creator: 'Made by:', editMode: 'Edit', decorateMode: 'Decorate', save: 'Save Image', preview: 'Polaroid preview',
       sizeHeading: 'Size', aspectSquare: '1:1', aspectLandscape: '3:4 Landscape', aspectPortrait: '3:4 Portrait',
       sizeHint: 'Changing the size resets your decorations.',
@@ -854,14 +882,14 @@
       dragHint: 'Select the Move tool to drag and reposition the photo.', canvasAdd: 'Add Photo',
       captionHeading: 'Caption', captionPlaceholder: 'Type a caption',
       cardBgLabel: 'Background', captionColorLabel: 'Text Color', captionSizeLabel: 'Text Size',
-      decorateHeading: 'Decorate', lockOverlay: 'Upload a photo first<br>to unlock decorating',
+      decorateHeading: 'Decorate (Acrylic Pen)', lockOverlay: 'Upload a photo first<br>to unlock decorating',
       toolPen: 'Pen', toolEraser: 'Eraser', toolMove: 'Move Photo',
-      colorLabel: 'Pen Color', brushSizeLabel: 'Size', layerHeadingLabel: 'Layers',
+      colorLabel: 'Pen Color', brushSizeLabel: 'Size', layerHeadingLabel: 'Pen Layers',
       layer: 'Layer', undo: 'Undo', redo: 'Redo', clearLayer: 'Clear Layer', clearAll: 'Clear All',
       colorPickerTitle: 'Choose Color', colorApply: 'Apply', colorEyedropper: 'Eyedropper',
       colorSVAria: 'Saturation and brightness', colorHueAria: 'Hue', colorHexAria: 'HEX color',
       confirmClearAll: 'Clear all layers?', confirmClearAspect: 'Changing the size now will reset your decorations!',
-      layerDragHint: 'Drag to reorder', colorRecentLabel: 'Recent Colors', fullscreenOpen: 'Enlarge preview', fullscreenClose: 'Close fullscreen',
+      layerDragHint: 'Drag to reorder', colorRecentLabel: 'Recent Colors', fullscreenOpen: 'Enlarge preview', fullscreenClose: 'Close fullscreen', stickerHeading: 'Stickers', addSticker: '+ Add sticker image', stickerSize: 'Size', stickerAngle: 'Angle', stickerHint: 'Use Move Photo to select a sticker. Drag corner handles to resize, the round top handle to rotate, and the sticker itself to move it. Stickers cannot be selected while using Pen or Eraser.', stickerLimit: 'You can add up to 5 stickers.', stickerDelete: 'Delete', stickerLabel: 'Sticker',
     },
     ja: {
       title: 'チェキメーカー', metaDesc: '写真をアップロードして、アクリルペンで自由にデコレーションできるチェキメーカーです。',
@@ -872,14 +900,14 @@
       dragHint: '「写真を移動」を選ぶと、ドラッグして位置を調整できます。', canvasAdd: '写真を追加',
       captionHeading: '文字', captionPlaceholder: 'テキストを入力してください',
       cardBgLabel: '背景色', captionColorLabel: '文字色', captionSizeLabel: '文字サイズ',
-      decorateHeading: 'デコレーション', lockOverlay: '先に写真をアップロードすると<br>デコレーション機能が使えます',
+      decorateHeading: 'デコレーション（アクリルペン）', lockOverlay: '先に写真をアップロードすると<br>デコレーション機能が使えます',
       toolPen: 'ペン', toolEraser: '消しゴム', toolMove: '写真を移動',
-      colorLabel: 'ペンの色', brushSizeLabel: '太さ', layerHeadingLabel: 'レイヤー',
+      colorLabel: 'ペンの色', brushSizeLabel: '太さ', layerHeadingLabel: 'ペンレイヤー',
       layer: 'レイヤー', undo: '元に戻す', redo: 'やり直す', clearLayer: 'レイヤーを消去', clearAll: 'すべて消去',
       colorPickerTitle: '色を選択', colorApply: '適用', colorEyedropper: 'スポイト',
       colorSVAria: '彩度と明るさ', colorHueAria: '色相', colorHexAria: 'HEXカラー',
       confirmClearAll: 'すべてのレイヤーを消去しますか？', confirmClearAspect: 'サイズを変更するとデコレーションがリセットされます！',
-      layerDragHint: 'ドラッグして順序を変更', colorRecentLabel: '最近使った色', fullscreenOpen: 'プレビューを大きく表示', fullscreenClose: '全画面を閉じる',
+      layerDragHint: 'ドラッグして順序を変更', colorRecentLabel: '最近使った色', fullscreenOpen: 'プレビューを大きく表示', fullscreenClose: '全画面を閉じる', stickerHeading: 'ステッカー', addSticker: '+ ステッカー画像を追加', stickerSize: 'サイズ', stickerAngle: '角度', stickerHint: '「写真を移動」でステッカーを選択すると自由変形ハンドルが表示されます。四隅でサイズ、上の丸いハンドルで角度、ステッカー本体のドラッグで位置を調整できます。ペン／消しゴム使用中は選択できません。', stickerLimit: 'ステッカーは最大5個まで追加できます。', stickerDelete: '削除', stickerLabel: 'ステッカー',
     },
     'zh-CN': {
       title: '拍立得制作器', metaDesc: '上传照片，用丙烯马克笔自由装饰你的拍立得照片。',
@@ -890,14 +918,14 @@
       dragHint: '选择“移动照片”工具后，可拖动调整照片位置。', canvasAdd: '添加照片',
       captionHeading: '文字', captionPlaceholder: '请输入文字',
       cardBgLabel: '背景色', captionColorLabel: '文字颜色', captionSizeLabel: '文字大小',
-      decorateHeading: '装饰', lockOverlay: '请先上传照片<br>即可使用装饰功能',
+      decorateHeading: '装饰（丙烯马克笔）', lockOverlay: '请先上传照片<br>即可使用装饰功能',
       toolPen: '画笔', toolEraser: '橡皮擦', toolMove: '移动照片',
-      colorLabel: '画笔颜色', brushSizeLabel: '粗细', layerHeadingLabel: '图层',
+      colorLabel: '画笔颜色', brushSizeLabel: '粗细', layerHeadingLabel: '画笔图层',
       layer: '图层', undo: '撤销', redo: '重做', clearLayer: '清除图层', clearAll: '全部清除',
       colorPickerTitle: '选择颜色', colorApply: '应用', colorEyedropper: '吸管',
       colorSVAria: '饱和度和亮度', colorHueAria: '色相', colorHexAria: 'HEX 颜色',
       confirmClearAll: '要清除所有图层吗？', confirmClearAspect: '现在更改尺寸会重置所有装饰！',
-      layerDragHint: '拖动以调整顺序', colorRecentLabel: '最近使用的颜色', fullscreenOpen: '放大预览', fullscreenClose: '退出全屏',
+      layerDragHint: '拖动以调整顺序', colorRecentLabel: '最近使用的颜色', fullscreenOpen: '放大预览', fullscreenClose: '退出全屏', stickerHeading: '贴纸', addSticker: '+ 添加贴纸图片', stickerSize: '大小', stickerAngle: '角度', stickerHint: '使用“移动照片”选择贴纸后会显示自由变换控件。拖动四角调整大小，拖动顶部圆形控件旋转，拖动贴纸本身移动位置。使用画笔或橡皮擦时无法选择贴纸。', stickerLimit: '最多可添加5个贴纸。', stickerDelete: '删除', stickerLabel: '贴纸',
     },
   };
   let lang = 'ko';
@@ -908,6 +936,7 @@
     img: null, zoom: 1, ox: 0, oy: 0,
     cardBg: '#fbfbfa',
     caption: { text: '', font: 'bold', color: '#1c1c1c', size: 40 },
+    stickers: [], activeSticker: null,
     tool: 'move',
     pen: { color: '#14b8a6', size: 14 },
     activeLayer: 0, // holds a layer's stable `id`, not its array index — ids never move when layers are reordered
@@ -1042,7 +1071,101 @@
     }
   }
 
-  function paint(g) {
+  function stickerDims(sticker) {
+    const maxBase = 180;
+    const k = Math.min(maxBase / sticker.img.naturalWidth, maxBase / sticker.img.naturalHeight, 1);
+    return { w: sticker.img.naturalWidth * k * sticker.scale, h: sticker.img.naturalHeight * k * sticker.scale };
+  }
+  function drawSticker(g, sticker) {
+    const { w, h } = stickerDims(sticker);
+    const outline = Math.max(5, Math.min(10, Math.min(w, h) * 0.07));
+    const pad = Math.ceil(outline * 1.8);
+
+    // Build the white die-cut outline on an isolated transparent canvas.
+    // PNG transparency is preserved and compositing never touches the Polaroid canvas.
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.ceil(w + pad * 2));
+    off.height = Math.max(1, Math.ceil(h + pad * 2));
+    const og = off.getContext('2d');
+    const ox = pad, oy = pad;
+    og.clearRect(0, 0, off.width, off.height);
+    og.globalCompositeOperation = 'source-over';
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
+      og.drawImage(sticker.img, ox + Math.cos(a) * outline, oy + Math.sin(a) * outline, w, h);
+    }
+    og.globalCompositeOperation = 'source-in';
+    og.fillStyle = '#fff';
+    og.fillRect(0, 0, off.width, off.height);
+    og.globalCompositeOperation = 'source-over';
+    og.drawImage(sticker.img, ox, oy, w, h);
+
+    g.save();
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+    g.translate(sticker.x, sticker.y);
+    g.rotate((sticker.rotation || 0) * Math.PI / 180);
+    g.drawImage(off, -off.width / 2, -off.height / 2);
+    g.restore();
+  }
+  function stickerRotatedDims(sticker) {
+    const { w, h } = stickerDims(sticker);
+    const rad = (sticker.rotation || 0) * Math.PI / 180;
+    const c = Math.abs(Math.cos(rad)), sn = Math.abs(Math.sin(rad));
+    return { w: w * c + h * sn, h: w * sn + h * c };
+  }
+  function clampStickerToCard(sticker) {
+    // Keep the transform center on the Polaroid, not the rotated AABB.
+    // This intentionally allows rotated sticker corners to reach/bleed into card edges.
+    const {W,H}=cardDims();
+    sticker.x = clamp(sticker.x, 0, W);
+    sticker.y = clamp(sticker.y, 0, H);
+  }
+  function stickerAt(p) {
+    // Hit-test in the sticker's local (unrotated) coordinate system.
+    for (let i = state.stickers.length - 1; i >= 0; i--) {
+      const st = state.stickers[i], d = stickerDims(st);
+      const rad = -(st.rotation || 0) * Math.PI / 180;
+      const dx = p.x - st.x, dy = p.y - st.y;
+      const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
+      const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
+      if (Math.abs(lx) <= d.w/2 && Math.abs(ly) <= d.h/2) return st;
+    }
+    return null;
+  }
+  function stickerLocalPoint(sticker, p) {
+    const rad = -(sticker.rotation || 0) * Math.PI / 180;
+    const dx = p.x - sticker.x, dy = p.y - sticker.y;
+    return { x: dx * Math.cos(rad) - dy * Math.sin(rad), y: dx * Math.sin(rad) + dy * Math.cos(rad) };
+  }
+  function stickerTransformHandleAt(sticker, p) {
+    if (!sticker || state.tool !== 'move') return null;
+    const d = stickerDims(sticker), q = stickerLocalPoint(sticker, p);
+    const handleR = 18, corners = [
+      ['nw', -d.w/2, -d.h/2], ['ne', d.w/2, -d.h/2],
+      ['se', d.w/2, d.h/2], ['sw', -d.w/2, d.h/2]
+    ];
+    for (const [name,x,y] of corners) if (Math.hypot(q.x-x,q.y-y) <= handleR) return {type:'scale', corner:name};
+    const rotY = -d.h/2 - 42;
+    if (Math.hypot(q.x, q.y-rotY) <= handleR) return {type:'rotate'};
+    return null;
+  }
+  function drawStickerSelection(g, sticker) {
+    if (!sticker || state.tool !== 'move') return;
+    const d = stickerDims(sticker);
+    g.save();
+    g.translate(sticker.x, sticker.y);
+    g.rotate((sticker.rotation || 0) * Math.PI / 180);
+    g.lineWidth = 2; g.strokeStyle = '#2563eb'; g.setLineDash([7,5]);
+    g.strokeRect(-d.w/2, -d.h/2, d.w, d.h); g.setLineDash([]);
+    g.beginPath(); g.moveTo(0, -d.h/2); g.lineTo(0, -d.h/2 - 42); g.stroke();
+    const pts=[[-d.w/2,-d.h/2],[d.w/2,-d.h/2],[d.w/2,d.h/2],[-d.w/2,d.h/2]];
+    g.fillStyle='#fff'; g.strokeStyle='#2563eb'; g.lineWidth=2;
+    for(const [x,y] of pts){ g.beginPath(); g.rect(x-7,y-7,14,14); g.fill(); g.stroke(); }
+    g.beginPath(); g.arc(0,-d.h/2-42,8,0,Math.PI*2); g.fill(); g.stroke();
+    g.restore();
+  }
+
+  function paint(g, showStickerSelection = false) {
     const { W, H } = cardDims();
     g.clearRect(0, 0, W, H);
 
@@ -1072,6 +1195,9 @@
 
     drawCaption(g, captionRect());
 
+    // Stickers sit above the Polaroid/photo/caption, but below all pen decoration layers.
+    for (const sticker of state.stickers) drawSticker(g, sticker);
+
     // Each layer is rendered on its own offscreen canvas (starting fully transparent)
     // so an eraser's destination-out only punches through that layer's own ink —
     // never the photo/caption/other layers already painted on the main canvas.
@@ -1095,6 +1221,10 @@
     roundRectPath(g, 0, 0, W, H, CORNER);
     g.lineWidth = 1; g.strokeStyle = 'rgba(0,0,0,.10)'; g.stroke();
     g.restore();
+
+    if (showStickerSelection && state.tool === 'move' && state.activeSticker != null) {
+      drawStickerSelection(g, state.stickers.find(s => s.id === state.activeSticker));
+    }
   }
 
   function render() {
@@ -1111,7 +1241,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cv.style.width = cssW + 'px';
     cv.style.height = Math.round(H * (cssW / W)) + 'px';
-    paint(ctx);
+    paint(ctx, true);
   }
 
   // ---- photo pick ----
@@ -1154,6 +1284,8 @@
   }
 
   let photoDrag = null;
+  let stickerDrag = null;
+  let stickerTransform = null;
   let activeStroke = null;
 
   // ---- decoration undo/redo history (one entry per finished stroke or clear action) ----
@@ -1195,6 +1327,24 @@
     if (!inCard(p)) return;
     try { cv.setPointerCapture(e.pointerId); } catch (_) {}
     if (state.tool === 'move') {
+      const active = state.stickers.find(s => s.id === state.activeSticker);
+      const handle = stickerTransformHandleAt(active, p);
+      if (active && handle) {
+        const centerScreen = { x: e.clientX - (p.x-active.x)/p.k, y: e.clientY - (p.y-active.y)/p.k };
+        stickerTransform = { id: active.id, type: handle.type, startScale: active.scale, startRotation: active.rotation||0, centerScreen, startDist: Math.max(1, Math.hypot(e.clientX-centerScreen.x,e.clientY-centerScreen.y)), startAngle: Math.atan2(e.clientY-centerScreen.y,e.clientX-centerScreen.x) };
+        cv.classList.add('sticker-transforming');
+        return;
+      }
+      const hitSticker = stickerAt(p);
+      if (hitSticker) {
+        state.activeSticker = hitSticker.id;
+        buildStickerList();
+        stickerDrag = { id: hitSticker.id, x: e.clientX, y: e.clientY, sx: hitSticker.x, sy: hitSticker.y, k: p.k };
+        cv.style.cursor = 'grabbing';
+        render();
+        return;
+      }
+      state.activeSticker = null; buildStickerList(); render();
       photoDrag = { x: e.clientX, y: e.clientY, ox: state.ox, oy: state.oy, k: p.k };
       cv.style.cursor = 'grabbing';
       return;
@@ -1211,7 +1361,29 @@
     render();
   });
   cv.addEventListener('pointermove', (e) => {
-    if ((photoDrag || activeStroke) && e.buttons === 0) { endPointer(); return; }
+    if ((photoDrag || stickerDrag || stickerTransform || activeStroke) && e.buttons === 0) { endPointer(); return; }
+    if (stickerTransform) {
+      const st = state.stickers.find(s => s.id === stickerTransform.id);
+      if (st) {
+        const dx=e.clientX-stickerTransform.centerScreen.x, dy=e.clientY-stickerTransform.centerScreen.y;
+        if (stickerTransform.type === 'scale') {
+          const dist=Math.max(1,Math.hypot(dx,dy));
+          st.scale=clamp(stickerTransform.startScale*(dist/stickerTransform.startDist),0.2,4);
+        } else {
+          const angle=Math.atan2(dy,dx);
+          let deg=stickerTransform.startRotation+(angle-stickerTransform.startAngle)*180/Math.PI;
+          if (e.shiftKey) deg=Math.round(deg/15)*15;
+          st.rotation=((deg+180)%360+360)%360-180;
+        }
+        clampStickerToCard(st); render();
+      }
+      return;
+    }
+    if (stickerDrag) {
+      const st = state.stickers.find(s => s.id === stickerDrag.id);
+      if (st) { st.x = stickerDrag.sx + (e.clientX-stickerDrag.x)*stickerDrag.k; st.y = stickerDrag.sy + (e.clientY-stickerDrag.y)*stickerDrag.k; clampStickerToCard(st); render(); }
+      return;
+    }
     if (photoDrag) {
       state.ox = photoDrag.ox + (e.clientX - photoDrag.x) * photoDrag.k;
       state.oy = photoDrag.oy + (e.clientY - photoDrag.y) * photoDrag.k;
@@ -1230,10 +1402,10 @@
     if (!state.img) { cv.style.cursor = 'pointer'; return; }
     cv.style.cursor = state.tool === 'move' ? 'grab' : (isDecorateUnlocked() ? 'crosshair' : 'default');
   });
-  function endPointer() { photoDrag = null; activeStroke = null; cv.style.cursor = 'default'; }
+  function endPointer() { photoDrag = null; stickerDrag = null; stickerTransform = null; activeStroke = null; cv.classList.remove('sticker-transforming'); cv.style.cursor = 'default'; }
   cv.addEventListener('pointerup', endPointer);
   cv.addEventListener('pointercancel', endPointer);
-  cv.addEventListener('pointerleave', () => { if (!photoDrag && !activeStroke) cv.style.cursor = 'default'; });
+  cv.addEventListener('pointerleave', () => { if (!photoDrag && !stickerDrag && !stickerTransform && !activeStroke) cv.style.cursor = 'default'; });
 
   cv.addEventListener('wheel', (e) => {
     const p = toCanvas(e);
@@ -1288,6 +1460,7 @@
   // ---- tool ----
   function syncToolUI() {
     $$('#toolGroup button').forEach((b) => b.classList.toggle('active', b.dataset.tool === state.tool));
+    if ($('#stickerList')) buildStickerList();
   }
   $('#toolGroup').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-tool]');
@@ -1361,6 +1534,46 @@
     state.pen.size = +e.target.value; $('#brushSizeVal').textContent = e.target.value;
     syncSizePresetUI();
   });
+
+  // ---- stickers (max 5; independent sticker stack: background -> Sticker A..E -> pen layers) ----
+  let nextStickerId = 1;
+  $('#addStickerBtn').addEventListener('click', () => {
+    if (state.stickers.length >= 5) { alert(t('stickerLimit')); return; }
+    stickerPicker.value = ''; stickerPicker.click();
+  });
+  stickerPicker.addEventListener('change', () => { const f = stickerPicker.files[0]; if (f) addStickerFile(f); });
+  function addStickerFile(file) {
+    if (!file || !file.type.startsWith('image/') || state.stickers.length >= 5) return;
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const {W,H} = cardDims();
+      const sticker = { id: nextStickerId++, name: file.name || `Sticker ${nextStickerId}`, img, x: W/2, y: H - Math.min(115, CAP_H*.55), scale: 1, rotation: 0 };
+      state.stickers.push(sticker); state.activeSticker = sticker.id; state.tool = 'move'; syncToolUI();
+      buildStickerList(); render(); URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }
+  function buildStickerList() {
+    const list=$('#stickerList'), count=$('#stickerCount'), add=$('#addStickerBtn');
+    list.innerHTML=''; count.textContent=`${state.stickers.length} / 5`; add.disabled=state.stickers.length>=5;
+    const canEdit = state.tool === 'move';
+    state.stickers.forEach((st,i)=>{
+      const selected = canEdit && st.id===state.activeSticker;
+      const el=document.createElement('div'); el.className='sticker-item'+(selected?' active':'');
+      const name=document.createElement('button'); name.type='button'; name.className='sticker-name';
+      const letter=String.fromCharCode(65+i);
+      name.textContent=`${t('stickerLabel')} ${letter} · ${st.name}`;
+      name.title=`${t('stickerLabel')} ${letter}: ${st.name}`;
+      name.disabled=!canEdit;
+      name.onclick=()=>{ if(!canEdit)return; state.activeSticker=st.id;buildStickerList();render(); };
+      const down=document.createElement('button'); down.type='button'; down.className='mini'; down.textContent='↓'; down.disabled=i===0; down.title=`${t('stickerLabel')} ${String.fromCharCode(65+i)} ↓`; down.onclick=()=>moveStickerLayer(i,-1);
+      const up=document.createElement('button'); up.type='button'; up.className='mini'; up.textContent='↑'; up.disabled=i===state.stickers.length-1; up.title=`${t('stickerLabel')} ${String.fromCharCode(65+i)} ↑`; up.onclick=()=>moveStickerLayer(i,1);
+      const del=document.createElement('button'); del.type='button'; del.className='mini'; del.textContent='×'; del.title=t('stickerDelete'); del.onclick=()=>{state.stickers=state.stickers.filter(x=>x.id!==st.id); if(state.activeSticker===st.id) state.activeSticker=state.stickers.at(-1)?.id??null; buildStickerList();render();};
+      el.append(name,down,up,del); list.appendChild(el);
+    });
+  }
+  function moveStickerLayer(i,delta){ const j=i+delta; if(j<0||j>=state.stickers.length)return; [state.stickers[i],state.stickers[j]]=[state.stickers[j],state.stickers[i]]; buildStickerList(); render(); }
+
 
   // ---- layers ----
   const EYE_OPEN = '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>';
@@ -1529,6 +1742,10 @@
     $('#colorLabel').textContent = t('colorLabel');
     $('#brushSizeLabel').textContent = t('brushSizeLabel');
     $('#layerHeadingLabel').textContent = t('layerHeadingLabel');
+    $('#stickerHeading').textContent = t('stickerHeading');
+    $('#addStickerBtn').textContent = t('addSticker');
+    $('#stickerHint').textContent = t('stickerHint');
+    buildStickerList();
     $('#undoLabel').textContent = t('undo');
     $('#redoLabel').textContent = t('redo');
     $('#clearLayerBtn').textContent = t('clearLayer');
@@ -1805,6 +2022,8 @@
   setTimeout(render, 300);
 })();
 </script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"7939e04a4baf43c8b86a560f74aac60e","spa":2}' crossorigin="anonymous"></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1c1c7799c54e46349cc23295b5e08299","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"7939e04a4baf43c8b86a560f74aac60e","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1c1c7799c54e46349cc23295b5e08299","spa":2}' crossorigin="anonymous"></script>
 </body>
